@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// work conserving
+// restart wroker
+// data locality
+// task failure
+var LogFileNames = []string{"log_work_conserving", "log_rejoin", "log_locality", "log_task_failure"}
+
 const outDir = "tmp"
 const (
 	PENDING = iota // not assigned to a worker yet
@@ -40,6 +46,7 @@ type Coordinator struct {
 	mapCount    int    // number of schedulable map tasks
 	reduceCount int    // number of schedulable reduce tasks has not yet completed
 	mu          sync.Mutex
+	failCount   int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -79,6 +86,20 @@ func (c *Coordinator) waitForReply(task *Task) {
 	// assume failure if the task is still running after waiting for 10s
 	if task.state == RUNNING {
 		task.state = PENDING // make it schedulable again
+		c.failCount++
+		if os.Getenv("TEST_TASK_FAIL") == "1" {
+			f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+			fmt.Fprintln(f, "task failure count", c.failCount)
+			f.Close()
+		}
+	}
+
+	if c.failCount == 3 && os.Getenv("TEST_TASK_FAIL") == "1" {
+		f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+		fmt.Fprintln(f, "too many failures, kill the job")
+		c.mapCount = 0
+		c.reduceCount = 0
+		f.Close()
 	}
 }
 
@@ -103,9 +124,24 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	reply.TaskId = idx
 	reply.File = task.file
 
-	// if task.kind != NULL_TASK {
-	// 	fmt.Println("hand:", task.file, task.kind, c.mapCount, c.reduceCount)
-	// }
+	if task.kind != NULL_TASK {
+		pCount := 0
+		for i := 0; i < len(c.mapTasks); i++ {
+			if c.mapTasks[i].state == PENDING {
+				pCount++
+			}
+		}
+		for i := 0; i < len(c.reduceTasks); i++ {
+			if c.reduceTasks[i].state == PENDING {
+				pCount++
+			}
+		}
+		if os.Getenv("TEST_WORK_RESERVING") == "1" {
+			f, _ := os.OpenFile("./../"+LogFileNames[0], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+			fmt.Fprintln(f, "GetTask: pending count:", pCount)
+			f.Close()
+		}
+	}
 
 	go c.waitForReply(task)
 
@@ -191,6 +227,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	// Your code here.
 	c.mapCount = len(files)
 	c.reduceCount = nReduce
+	c.failCount = 0
 
 	for i := 0; i < c.mapCount; i++ {
 		c.mapTasks = append(c.mapTasks, Task{kind: MAP_TASK, state: PENDING, file: files[i]})

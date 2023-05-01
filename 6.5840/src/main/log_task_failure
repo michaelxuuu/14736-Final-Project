@@ -1,0 +1,7 @@
+worker 88309 failed
+worker 88308 failed
+worker 88310 failed
+task failure count 1
+task failure count 2
+task failure count 3
+too many failures, kill the job

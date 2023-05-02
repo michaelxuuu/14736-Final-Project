@@ -13,6 +13,7 @@ import (
 
 // Add your RPC definitions here.
 type GetReduceCountArgs struct {
+	WorkerId int
 }
 
 type GetReduceCountReply struct {

@@ -72,6 +72,10 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		exit, succ := false, true
 		if reply.TaskKind == MAP_TASK {
+			if os.Getenv("TEST_LOC") == "1" {
+				f, _ := os.OpenFile("./../"+LogFileNames[2], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+				fmt.Fprintln(f, "worker", getNodeId(), "got map task with file:", reply.File, "and id", reply.TaskId)
+			}
 			execMap(mapf, reply.File, reply.TaskId)
 			reportFinishedTask(MAP_TASK, reply.TaskId)
 		} else if reply.TaskKind == REDUCE_TASK {
@@ -200,10 +204,6 @@ func requestTask() (*GetTaskReply, bool) {
 	args := GetTaskArgs{getNodeId()}
 	reply := GetTaskReply{}
 	succ := callCoordinator("Coordinator.GetTask", &args, &reply)
-	if os.Getenv("TEST_REJOIN") == "1" {
-		f, _ := os.OpenFile("./../"+LogFileNames[1], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
-		fmt.Fprintln(f, "worker", getNodeId(), "got task of kind:", reply.TaskKind)
-	}
 	return &reply, succ
 }
 
@@ -218,7 +218,7 @@ func reportFinishedTask(taskType int, taskId int) (bool, bool) {
 
 // RPC used for getting reduce count from the coordinator
 func getReduceCount() (int, bool) {
-	args := GetReduceCountArgs{}
+	args := GetReduceCountArgs{getNodeId()}
 	reply := GetReduceCountReply{}
 	succ := callCoordinator("Coordinator.GetReduceCount", &args, &reply)
 

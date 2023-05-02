@@ -47,6 +47,7 @@ type Coordinator struct {
 	reduceCount int    // number of schedulable reduce tasks has not yet completed
 	mu          sync.Mutex
 	failCount   int
+	workers     []int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -57,16 +58,20 @@ type Coordinator struct {
 func (c *Coordinator) GetReduceCount(args *GetReduceCountArgs, reply *GetReduceCountReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.workers = append(c.workers, args.WorkerId)
 	reply.ReduceCount = len(c.reduceTasks)
 	return nil
 }
 
-func pick(tasks []Task, worker int) (*Task, int) {
+func (c *Coordinator) pick(tasks []Task, worker int) (*Task, int) {
 	for i := 0; i < len(tasks); i++ {
 		if tasks[i].state == PENDING {
-			tasks[i].state = RUNNING
-			tasks[i].worker = worker
-			return &tasks[i], i
+			if os.Getenv("TEST_LOC") != "1" || tasks[i].kind == REDUCE_TASK ||
+				(os.Getenv("TEST_LOC") == "1" && (worker == c.workers[0] && i < 3) || (worker == c.workers[1] && 3 <= i && i < 5) || (worker == c.workers[2] && 5 <= i && i < 9)) {
+				tasks[i].state = RUNNING
+				tasks[i].worker = worker
+				return &tasks[i], i
+			}
 		}
 	}
 	return &Task{kind: NULL_TASK}, -1
@@ -111,9 +116,9 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	var idx int
 
 	if c.mapCount != 0 {
-		task, idx = pick(c.mapTasks, args.WorkerId)
+		task, idx = c.pick(c.mapTasks, args.WorkerId)
 	} else if c.reduceCount != 0 {
-		task, idx = pick(c.reduceTasks, args.WorkerId)
+		task, idx = c.pick(c.reduceTasks, args.WorkerId)
 	} else {
 		task = &Task{kind: EXIT_TASK}
 		idx = -1

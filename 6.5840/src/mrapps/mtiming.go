@@ -10,12 +10,13 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"mr"
 	"os"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
+
+	"6.5840/mr"
 )
 
 func nparallel(phase string) int {

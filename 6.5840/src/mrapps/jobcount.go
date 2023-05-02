@@ -12,11 +12,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"mr"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"6.5840/mr"
 )
 
 var count int

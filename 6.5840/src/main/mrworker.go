@@ -13,9 +13,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"mr"
 	"os"
 	"plugin"
+
+	"6.5840/mr"
 )
 
 func main() {

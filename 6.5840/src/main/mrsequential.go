@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"mr"
 	"os"
 	"plugin"
 	"sort"
+
+	"6.5840/mr"
 )
 
 // for sorting by key.

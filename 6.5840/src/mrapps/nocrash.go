@@ -9,11 +9,12 @@ package main
 import (
 	crand "crypto/rand"
 	"math/big"
-	"mr"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+
+	"6.5840/mr"
 )
 
 func maybeCrash() {

@@ -8,10 +8,11 @@ package main
 
 import (
 	"fmt"
-	"mr"
 	"sort"
 	"strings"
 	"unicode"
+
+	"6.5840/mr"
 )
 
 // The mapping function is called once for each piece of the input.

@@ -11,9 +11,10 @@ package main
 
 import (
 	"fmt"
-	"mr"
 	"os"
 	"time"
+
+	"6.5840/mr"
 )
 
 func main() {

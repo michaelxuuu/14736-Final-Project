@@ -1,0 +1,164 @@
+package mr // import "6.5840/mr"
+
+
+CONSTANTS
+
+const (
+	PENDING = iota // not assigned to a worker yet
+	RUNNING
+	DONE
+)
+    Task status
+
+const (
+	MAP_TASK = iota
+	REDUCE_TASK
+	NULL_TASK // pseudo task: do nothing on receiving this task
+	EXIT_TASK // pseudo task: exit on receiving this task
+)
+    Task Types
+
+const outDir = "tmp"
+    Directory for intermediate values
+
+
+VARIABLES
+
+var LogFileNames = []string{"log_work_conserving", "log_rejoin", "log_locality", "log_task_failure"}
+    Output file names for trace-based test cases
+
+var hasDisconnected = 1
+    A special variable only used by Rejoin test
+
+var reduceCount int
+    Level of parallelism for reduce stage. It's an argument for creating the
+    coordinator.
+
+
+FUNCTIONS
+
+func Worker(mapf func(string, string) []KeyValue,
+	reducef func(string, []string) string)
+    main/mrworker.go calls this function to start a worker.
+
+func callCoordinator(rpcname string, args interface{}, reply interface{}) bool
+    send an RPC request to the coordinator, wait for the response. usually
+    returns true. returns false if something goes wrong.
+
+func coordinatorSock() string
+    Cook up a unique-ish UNIX-domain socket name in /var/tmp for the coordinator
+
+func execMap(mapf func(string, string) []KeyValue, filePath string, mapId int)
+    Call the map function and output the result to intermediate files
+
+func execReduce(reducef func(string, []string) string, reduceId int)
+    Pull the intermediate values, call reduce, and output the result to files
+
+func getNodeId() int
+    Return a globally unique identifier of the node
+
+func getReduceCount() (int, bool)
+    RPC used for getting reduce count from the coordinator
+
+func ihash(key string) int
+    use ihash(key) % NReduce to choose the reduce task number for each KeyValue
+    emitted by Map.
+
+func reportFinishedTask(taskType int, taskId int) (bool, bool)
+    RPC used for report finished task to the coordinator
+
+
+TYPES
+
+type Coordinator struct {
+	mapTasks    []Task // a list of map tasks (persistent - finished tasks not removed)
+	reduceTasks []Task // a list of reudce tasks (persistent - finished tasks not removed)
+	mapCount    int    // number of schedulable map tasks
+	reduceCount int    // number of schedulable reduce tasks has not yet completed
+	mu          sync.Mutex
+	failCount   int
+	workers     []int
+}
+    Internal states for coordinator
+
+func MakeCoordinator(files []string, nReduce int) *Coordinator
+    create a Coordinator. main/mrcoordinator.go calls this function. nReduce is
+    the number of reduce tasks to use.
+
+func (c *Coordinator) Done() bool
+    main/mrcoordinator.go calls Done() periodically to find out if the entire
+    job has finished.
+
+func (c *Coordinator) GetReduceCount(args *GetReduceCountArgs, reply *GetReduceCountReply) error
+    Called once by the worker during their initialization phase to get the total
+    number of reduce tasks (this is an argument passed to the master during
+    creation by the main routine)
+
+func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error
+    RPC call for workers to pull tasks.
+
+func (c *Coordinator) SubmitTask(args *SubmitTaskArgs, reply *SubmitTaskReply) error
+    RPC call for workers to notify the coordinator upon task completion.
+
+func (c *Coordinator) pick(tasks []Task, worker int) (*Task, int)
+    Locality-aware scheduling function
+
+func (c *Coordinator) server()
+    start a thread that listens for RPCs from worker.go
+
+func (c *Coordinator) waitForReply(task *Task)
+    Check task status 10s after it's scheduled. If the task is still running,
+    consider it as failed and reschedule.
+
+type GetReduceCountArgs struct {
+	WorkerId int
+}
+    Argument struct for GetReduceCount RPC
+
+type GetReduceCountReply struct {
+	ReduceCount int
+}
+    Reply struct for GetReduceCount RPC
+
+type GetTaskArgs struct {
+	WorkerId int // worker must identify itself to the coordinate using this field
+}
+    Argument struct for GetTask RPC
+
+type GetTaskReply struct {
+	// perform "Type" task on "File" file
+	// Idx to send back to the coordinator to help identifying the task on its side
+	TaskKind int    // a map, reduce, null, or exit task
+	TaskId   int    // just the index of the task in the task list maintained by the coordinator
+	File     string // path to the original file (for the map task) or the intermediate file (for the reduece task) in the DFS
+}
+    Reply struct for GetTaskReply RPC
+
+func requestTask() (*GetTaskReply, bool)
+    RPC used for requesting task from the coordinator
+
+type KeyValue struct {
+	Key   string
+	Value string
+}
+    A struct for key-value pair
+
+type SubmitTaskArgs struct {
+	WorkerId int // who am i
+	TaskId   int // use the idx provided by the coordinator in GetTaskReply
+	TaskKind int // instruct the coordinator which task list (map tasks/ reduce tasks) to search for the task
+}
+    Argument struct for SubmitTask RPC
+
+type SubmitTaskReply struct {
+}
+    Reply struct for SubmitTask RPC
+
+type Task struct {
+	kind   int
+	state  int
+	file   string // file path
+	worker int    // worker to which this task's assigned to
+}
+    Task-related informations
+

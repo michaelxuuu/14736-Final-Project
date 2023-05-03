@@ -14,19 +14,20 @@ import (
 	"time"
 )
 
-// work conserving
-// restart wroker
-// data locality
-// task failure
+// Output file names for trace-based test cases
 var LogFileNames = []string{"log_work_conserving", "log_rejoin", "log_locality", "log_task_failure"}
 
+// Directory for intermediate values
 const outDir = "tmp"
+
+// Task status
 const (
 	PENDING = iota // not assigned to a worker yet
 	RUNNING
 	DONE
 )
 
+// Task Types
 const (
 	MAP_TASK = iota
 	REDUCE_TASK
@@ -34,6 +35,7 @@ const (
 	EXIT_TASK // pseudo task: exit on receiving this task
 )
 
+// Task-related informations
 type Task struct {
 	kind   int
 	state  int
@@ -41,8 +43,8 @@ type Task struct {
 	worker int    // worker to which this task's assigned to
 }
 
+// Internal states for coordinator
 type Coordinator struct {
-	// Your definitions here.
 	mapTasks    []Task // a list of map tasks (persistent - finished tasks not removed)
 	reduceTasks []Task // a list of reudce tasks (persistent - finished tasks not removed)
 	mapCount    int    // number of schedulable map tasks
@@ -51,8 +53,6 @@ type Coordinator struct {
 	failCount   int
 	workers     []int
 }
-
-// Your code here -- RPC handlers for the worker to call.
 
 // Called once by the worker during their initialization phase
 // to get the total number of reduce tasks (this is an argument
@@ -124,6 +124,8 @@ func (c *Coordinator) pick(tasks []Task, worker int) (*Task, int) {
 	return &Task{kind: NULL_TASK}, -1
 }
 
+// Check task status 10s after it's scheduled. If the task is still running,
+// consider it as failed and reschedule.
 func (c *Coordinator) waitForReply(task *Task) {
 	// only wait for map or reduce tasks
 	if task.kind != MAP_TASK && task.kind != REDUCE_TASK {
@@ -155,6 +157,7 @@ func (c *Coordinator) waitForReply(task *Task) {
 	}
 }
 
+// RPC call for workers to pull tasks.
 func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -200,6 +203,7 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 	return nil
 }
 
+// RPC call for workers to notify the coordinator upon task completion.
 func (c *Coordinator) SubmitTask(args *SubmitTaskArgs, reply *SubmitTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

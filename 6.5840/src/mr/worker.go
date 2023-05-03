@@ -14,12 +14,14 @@ import (
 	"time"
 )
 
-// Map functions return a slice of KeyValue.
+// A struct for key-value pair
 type KeyValue struct {
 	Key   string
 	Value string
 }
 
+// Level of parallelism for reduce stage. It's an argument for
+// creating the coordinator.
 var reduceCount int
 
 // use ihash(key) % NReduce to choose the reduce
@@ -30,9 +32,10 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
+// A special variable only used by Rejoin test
 var hasDisconnected = 1
 
-// main/mrworker.go calls this function.
+// main/mrworker.go calls this function to start a worker.
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
@@ -102,61 +105,29 @@ func execMap(mapf func(string, string) []KeyValue, filePath string, mapId int) {
 
 	prefix := fmt.Sprintf("%v/mr-%v", outDir, mapId)
 
-	// for i := 0; i < reduceCount; i++ {
-	// 	filePath := fmt.Sprintf("%v-%v-%v", prefix, i, getNodeId())
-	// 	file, err := os.Create(filePath)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	buf := bufio.NewWriter(file)
-	// 	encoder := json.NewEncoder(buf)
-
-	// 	// write intermediate values to corresponding partition
-	// 	for _, kv := range path2Content {
-	// 		if ihash(kv.Key)%reduceCount == i {
-	// 			encoder.Encode(&kv)
-	// 		}
-	// 	}
-
-	// 	buf.Flush()
-	// 	inputSplit.Close()
-
-	// 	// Rename the file to ensure no partial file is read
-	// 	finalPath := fmt.Sprintf("%v-%v", prefix, i)
-	// 	os.Rename(file.Name(), finalPath)
-	// 	file.Close()
-	// }
-
-	files := make([]*os.File, 0, reduceCount)
-	buffers := make([]*bufio.Writer, 0, reduceCount)
-	encoders := make([]*json.Encoder, 0, reduceCount)
-
-	// create temp files, use pid to uniquely identify this worker
 	for i := 0; i < reduceCount; i++ {
-		filePath := fmt.Sprintf("%v-%v-%v", prefix, i, os.Getpid())
-		file, _ := os.Create(filePath)
+		filePath := fmt.Sprintf("%v-%v-%v", prefix, i, getNodeId())
+		file, err := os.Create(filePath)
+		if err != nil {
+			panic(err)
+		}
 		buf := bufio.NewWriter(file)
-		files = append(files, file)
-		buffers = append(buffers, buf)
-		encoders = append(encoders, json.NewEncoder(buf))
-	}
+		encoder := json.NewEncoder(buf)
 
-	// write map outputs to temp files
-	for _, kv := range path2Content {
-		idx := ihash(kv.Key) % reduceCount
-		encoders[idx].Encode(&kv)
-	}
+		// write intermediate values to corresponding partition
+		for _, kv := range path2Content {
+			if ihash(kv.Key)%reduceCount == i {
+				encoder.Encode(&kv)
+			}
+		}
 
-	// flush file buffer to disk
-	for _, buf := range buffers {
 		buf.Flush()
-	}
+		inputSplit.Close()
 
-	// atomically rename temp files to ensure no one observes partial files
-	for i, file := range files {
+		// Rename the file to ensure no partial file is read
+		finalPath := fmt.Sprintf("%v-%v", prefix, i)
+		os.Rename(file.Name(), finalPath)
 		file.Close()
-		newPath := fmt.Sprintf("%v-%v", prefix, i)
-		os.Rename(file.Name(), newPath)
 	}
 }
 
@@ -227,6 +198,7 @@ func getReduceCount() (int, bool) {
 	return reply.ReduceCount, succ
 }
 
+// Return a globally unique identifier of the node
 func getNodeId() int {
 	// Since the mapReduce is designed to run on one machine,
 	// we use pid as the unique node identifier.

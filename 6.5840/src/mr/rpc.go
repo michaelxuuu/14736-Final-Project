@@ -11,20 +11,22 @@ import (
 	"strconv"
 )
 
-// Add your RPC definitions here.
+// Argument struct for GetReduceCount RPC
 type GetReduceCountArgs struct {
 	WorkerId int
 }
 
+// Reply struct for GetReduceCount RPC
 type GetReduceCountReply struct {
 	ReduceCount int
 }
 
+// Argument struct for GetTask RPC
 type GetTaskArgs struct {
 	WorkerId int // worker must identify itself to the coordinate using this field
 }
 
-// this is the reply to the worker from the coordinate
+// Reply struct for GetTaskReply RPC
 type GetTaskReply struct {
 	// perform "Type" task on "File" file
 	// Idx to send back to the coordinator to help identifying the task on its side
@@ -33,19 +35,19 @@ type GetTaskReply struct {
 	File     string // path to the original file (for the map task) or the intermediate file (for the reduece task) in the DFS
 }
 
+// Argument struct for SubmitTask RPC
 type SubmitTaskArgs struct {
 	WorkerId int // who am i
 	TaskId   int // use the idx provided by the coordinator in GetTaskReply
 	TaskKind int // instruct the coordinator which task list (map tasks/ reduce tasks) to search for the task
 }
 
+// Reply struct for SubmitTask RPC
 type SubmitTaskReply struct {
 }
 
 // Cook up a unique-ish UNIX-domain socket name
-// in /var/tmp, for the coordinator.
-// Can't use the current directory since
-// Athena AFS doesn't support UNIX-domain sockets.
+// in /var/tmp for the coordinator
 func coordinatorSock() string {
 	s := "/var/tmp/5840-mr-"
 	s += strconv.Itoa(os.Getuid())

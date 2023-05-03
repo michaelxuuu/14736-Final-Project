@@ -53,7 +53,7 @@ def CheckDataLocality(logPath):
                 worker_loc = match.group(1)
                 data_loc = match.group(2)
 
-                # Data locality is not enforced only when it's not possible
+                # Data locality is not enforced when it's impossible
                 if worker_loc != data_loc:
                     task_list = task_location.split()
                     for loc in task_list:
@@ -76,7 +76,12 @@ def CheckTaskFailure(logPath):
 
 """ Shell Script based Tests """
 def CheckCorrectness(output):
-    return "wc test: PASS" in output
+    return "wc test: PASS" in output and \
+    "indexer test: PASS" and \
+    "map parallelism test: PASS" and \
+    "reduce parallelism test: PASS" and \
+    "job count test: PASS" and \
+    "early exit test: PASS"
 
 def CheckFaultToleranceI(output):
     return "crash test: PASS" in output
@@ -156,7 +161,7 @@ if __name__ == "__main__":
         print("Task Failure Test: 0/10\n")
 
     if score == 100:
-        print("All trace-based test passed! 100/100\n")
+        print("All tests passed! 100/100\n")
     else:
         print("Something goes wrong :-( {}/100".format(score))
 

@@ -30,7 +30,7 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-var flag = 1
+var hasDisconnected = 1
 
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
@@ -45,16 +45,22 @@ func Worker(mapf func(string, string) []KeyValue,
 	for {
 		reply, succ := requestTask()
 
-		if os.Getenv("TEST_REJOIN") == "1" && flag == 1 {
-			f, _ := os.OpenFile("./../"+LogFileNames[1], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+		if os.Getenv("TEST_REJOIN") == "1" && hasDisconnected == 1 {
+			f, _ := os.OpenFile("./../"+LogFileNames[1], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 			fmt.Fprintln(f, "worker", getNodeId(), "goes to sleep, will rejoin in 15s")
 			time.Sleep(time.Second * 15)
-			flag = 0
+			hasDisconnected = 0
+			f.Close()
+		}
+
+		if os.Getenv("TEST_REJOIN") == "1" && hasDisconnected == 0 {
+			f, _ := os.OpenFile("./../"+LogFileNames[1], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+			fmt.Fprintln(f, "worker", getNodeId(), "got task of kind:", reply.TaskKind)
 			f.Close()
 		}
 
 		if os.Getenv("TEST_TASK_FAIL") == "1" {
-			f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+			f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 			fmt.Fprintln(f, "worker", getNodeId(), "failed")
 			f.Close()
 			return
@@ -72,10 +78,6 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		exit, succ := false, true
 		if reply.TaskKind == MAP_TASK {
-			if os.Getenv("TEST_LOC") == "1" {
-				f, _ := os.OpenFile("./../"+LogFileNames[2], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
-				fmt.Fprintln(f, "worker", getNodeId(), "got map task with file:", reply.File, "and id", reply.TaskId)
-			}
 			execMap(mapf, reply.File, reply.TaskId)
 			reportFinishedTask(MAP_TASK, reply.TaskId)
 		} else if reply.TaskKind == REDUCE_TASK {

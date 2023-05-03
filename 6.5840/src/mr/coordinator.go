@@ -8,6 +8,8 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,17 +65,62 @@ func (c *Coordinator) GetReduceCount(args *GetReduceCountArgs, reply *GetReduceC
 	return nil
 }
 
+// Locality-aware scheduling function
 func (c *Coordinator) pick(tasks []Task, worker int) (*Task, int) {
+	var worker_location string
+	for loc, w := range c.workers {
+		if worker == w {
+			worker_location = strconv.Itoa(loc)
+		}
+	}
+
+	observed_task_locations := make([]string, 0)
+	random_available_task := -1
+	random_available_task_loc := ""
 	for i := 0; i < len(tasks); i++ {
+		file_location := "N/A"
+		if len(tasks[i].file) > len("pg-") {
+			pos := strings.Index(tasks[i].file, "pg-") + len("pg-")
+			file_location = string(tasks[i].file[pos])
+		}
+
+		// If locality is achievable, just return
 		if tasks[i].state == PENDING {
-			if os.Getenv("TEST_LOC") != "1" || tasks[i].kind == REDUCE_TASK ||
-				(os.Getenv("TEST_LOC") == "1" && (worker == c.workers[0] && i < 3) || (worker == c.workers[1] && 3 <= i && i < 5) || (worker == c.workers[2] && 5 <= i && i < 9)) {
+			random_available_task = i
+			random_available_task_loc = file_location
+
+			observed_task_locations = append(observed_task_locations, file_location)
+
+			// Reduce task cannot exploit locality, so any worker is fine
+			if file_location == worker_location || tasks[i].kind == REDUCE_TASK {
+				if os.Getenv("TEST_LOC") == "1" && tasks[i].kind == MAP_TASK {
+					f, _ := os.OpenFile("./../"+LogFileNames[2], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+					fmt.Fprintln(f, "Observed pending task locations: ", observed_task_locations)
+					fmt.Fprintln(f, "Scheduling decision: worker location - ", worker_location, "; data location - ", file_location)
+					f.Close()
+				}
+
 				tasks[i].state = RUNNING
 				tasks[i].worker = worker
 				return &tasks[i], i
 			}
 		}
 	}
+
+	// Otherwise, select any task
+	if random_available_task >= 0 {
+		if os.Getenv("TEST_LOC") == "1" && tasks[random_available_task].kind == MAP_TASK {
+			f, _ := os.OpenFile("./../"+LogFileNames[2], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+			fmt.Fprintln(f, "observed task locations: ", observed_task_locations)
+			fmt.Fprintln(f, "schedulign decision: worker location - ", worker_location, "; data location - ", random_available_task_loc)
+			f.Close()
+		}
+
+		tasks[random_available_task].state = RUNNING
+		tasks[random_available_task].worker = worker
+		return &tasks[random_available_task], random_available_task
+	}
+
 	return &Task{kind: NULL_TASK}, -1
 }
 
@@ -93,14 +140,14 @@ func (c *Coordinator) waitForReply(task *Task) {
 		task.state = PENDING // make it schedulable again
 		c.failCount++
 		if os.Getenv("TEST_TASK_FAIL") == "1" {
-			f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+			f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 			fmt.Fprintln(f, "task failure count", c.failCount)
 			f.Close()
 		}
 	}
 
 	if c.failCount == 3 && os.Getenv("TEST_TASK_FAIL") == "1" {
-		f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+		f, _ := os.OpenFile("./../"+LogFileNames[3], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 		fmt.Fprintln(f, "too many failures, kill the job")
 		c.mapCount = 0
 		c.reduceCount = 0
@@ -142,7 +189,7 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			}
 		}
 		if os.Getenv("TEST_WORK_RESERVING") == "1" {
-			f, _ := os.OpenFile("./../"+LogFileNames[0], os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+			f, _ := os.OpenFile("./../"+LogFileNames[0], os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 			fmt.Fprintln(f, "GetTask: pending count:", pCount)
 			f.Close()
 		}
